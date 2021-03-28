@@ -22,7 +22,6 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     collections::{HashMap, HashSet},
-    convert::TryInto,
     fmt,
     rc::Rc,
 };
@@ -369,7 +368,6 @@ impl fmt::Debug for SchemaType<'_> {
                         &"bytes"
                     },
                 )
-                .field("name", &decimal.name())
                 .field("precision", &decimal.precision())
                 .field("scale", &decimal.scale())
                 .finish(),
@@ -426,12 +424,12 @@ impl<'s> FixedSchema<'s> {
 pub struct DecimalSchema<'s>(&'s Schema, NameRef);
 
 impl<'s> DecimalSchema<'s> {
-    pub fn name(&self) -> Name<'_> {
-        Name(self.0, self.1)
-    }
-
     pub fn schema(&self) -> SchemaType<'_> {
         self.0.root()
+    }
+
+    pub fn name(&self) -> Name<'_> {
+        Name(self.0, self.1)
     }
 
     pub fn is_fixed(&self) -> bool {
@@ -573,10 +571,24 @@ impl<'s> UnionSchema<'s> {
     /// within this enum.
     pub fn find_schema(&self, value: &crate::types::Value) -> Option<(usize, SchemaType)> {
         let kind = SchemaKind::from(value);
+
         self.iter_variants()
             .enumerate()
             // TODO shouldn't we also check for name and namespace?
-            .find(|(_pos, schema_type)| SchemaKind::from(*schema_type) == kind)
+            .find(|(_pos, schema_type)| {
+                let schema_kind = SchemaKind::from(*schema_type);
+                // A number default is always represented as a Value::Long. This check ensures that the right schema branch is found.
+                // TODO: Check what happens if kind is a logicalType and value resolves to a primitive? (uuid against string for instance)
+                // Also, if we have a schema with ["int", "long"] the int branch will be chosen. This probably cannot be fixed.
+
+                match (schema_kind, value) {
+                    (SchemaKind::Int, &crate::types::Value::Long(v)) => {
+                        v >= i32::min_value() as i64 && v <= i32::max_value() as i64
+                    }
+                    (SchemaKind::Long, &crate::types::Value::Int(_)) => true,
+                    _ => SchemaKind::from(*schema_type) == kind,
+                }
+            })
     }
 
     /// Optionally returns a reference to the schema matched by this value, as well as its position

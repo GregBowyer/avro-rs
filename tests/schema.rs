@@ -424,7 +424,6 @@ const DECIMAL_LOGICAL_TYPE: &[(&str, bool)] = &[
 ];
 
 const DECIMAL_LOGICAL_TYPE_ATTRIBUTES: &[(&str, bool)] = &[
-    /*
     // TODO: (#93) support logical types and attributes and uncomment
     (
         r#"{
@@ -435,7 +434,7 @@ const DECIMAL_LOGICAL_TYPE_ATTRIBUTES: &[(&str, bool)] = &[
             "scale": 2,
             "size": 2
         }"#,
-        true
+        true,
     ),
     (
         r#"{
@@ -443,9 +442,8 @@ const DECIMAL_LOGICAL_TYPE_ATTRIBUTES: &[(&str, bool)] = &[
             "logicalType": "decimal",
             "precision": 4
         }"#,
-        true
+        true,
     ),
-    */
 ];
 
 const DATE_LOGICAL_TYPE: &[(&str, bool)] = &[
@@ -594,6 +592,8 @@ fn test_parse() {
 fn test_valid_cast_to_string_after_parse() {
     for (raw_schema, _) in VALID_EXAMPLES.iter() {
         let schema = Schema::parse_str(raw_schema).unwrap();
+
+        println!("{:?}", schema.to_string());
         Schema::parse_str(schema.canonical_form().as_str()).unwrap();
     }
 }
@@ -707,10 +707,55 @@ fn test_parse_list_recursive_type_error() {
             {"name": "field_one", "type": "A"}
         ]
     }"#;
+    let schema_composite_1 = r#"{
+        "name": "A",
+        "type": "record",
+        "fields": [
+            { "name": "field_one",
+            "type": {
+                "name": "B",
+                "type": "record",
+                "fields": [
+                    {"name": "field_one", "type": "A"}
+                    ]
+                }
+            }
+        ]
+
+    }"#;
+    let schema_composite_2 = r#"{
+        "name": "B",
+        "type": "record",
+        "fields": [
+            { "name": "field_one",
+            "type": {
+                "name": "A",
+                "type": "record",
+                "fields": [
+                    {"name": "field_one", "type": "B"}
+                    ]
+                }
+            }
+        ]
+
+    }"#;
     let schema_strs_first = [schema_str_1, schema_str_2];
     let schema_strs_second = [schema_str_2, schema_str_1];
-    let _ = Schema::parse_list(&schema_strs_first).expect_err("Test failed");
-    let _ = Schema::parse_list(&schema_strs_second).expect_err("Test failed");
+
+    let schemas_first = Schema::parse_list(&schema_strs_first).expect("Test failed");
+    let schemas_second = Schema::parse_list(&schema_strs_second).expect("Test failed");
+
+    let parsed_composite_1 = Schema::parse_str(&schema_composite_1).expect("Test failed");
+    let parsed_composite_2 = Schema::parse_str(&schema_composite_2).expect("Test failed");
+
+    assert_eq!(
+        schemas_first,
+        vec!(parsed_composite_1.clone(), parsed_composite_2.clone())
+    );
+    assert_eq!(
+        schemas_second,
+        vec!(parsed_composite_2.clone(), parsed_composite_1.clone())
+    );
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use crate::{
     decimal::Decimal,
     duration::Duration,
-    schema::{FixedSchema, Schema, SchemaType},
+    schema::{Schema, SchemaType},
     types::Value,
     util::{safe_len, zag_i32, zag_i64},
     AvroResult, Error,

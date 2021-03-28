@@ -332,7 +332,7 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{duration::*, decimal::Decimal, types::Record, util::zig_i64};
+    use crate::{decimal::Decimal, duration::*, types::Record, util::zig_i64};
     use serde::{Deserialize, Serialize};
 
     const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
@@ -498,7 +498,7 @@ mod tests {
         let size = 30;
 
         let mut builder = Schema::builder();
-        let mut decimal = builder.named_decimal("decimal");
+        let mut decimal = builder.named_decimal("fixed_decimal");
         decimal.scale(5);
         decimal.size(size as u64);
         let root = decimal.precision(20, &mut builder)?;
@@ -506,7 +506,7 @@ mod tests {
 
         let value = vec![0u8; size];
         logical_type_test(
-            r#"{"type": "fixed", "size": 30, "name": "decimal", "logicalType": "decimal", "precision": 20, "scale": 5}"#,
+            r#"{"name": "fixed_decimal", "type": "fixed", "size": 30, "logicalType": "decimal", "precision": 20, "scale": 5}"#,
             &expected.root(),
             Value::Decimal(Decimal::from(value.clone())),
             &expected,

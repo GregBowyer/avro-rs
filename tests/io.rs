@@ -1,5 +1,5 @@
 //! Port of https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py
-use std::io::Cursor;
+use std::{io::Cursor, str::FromStr};
 
 use avro_rs::{from_avro_datum, to_avro_datum, types::Value, Error, Schema};
 use lazy_static::lazy_static;
@@ -39,17 +39,28 @@ lazy_static! {
         (r#""boolean""#, "true", Value::Boolean(true)),
         (r#""string""#, r#""foo""#, Value::String("foo".to_string())),
         // TODO: (#96) investigate why this is failing
-        //(r#""bytes""#, r#""\u00FF\u00FF""#, Value::Bytes(vec![0xff, 0xff])),
+        // > Reason is that the 00FF unicode char is encoded as a \xC3 \xBF which is not converted back to \xFF.
+        // (r#""bytes""#, r#""\u00FF\u00FF""#, Value::Bytes(vec![0xff, 0xff])),
         (r#""int""#, "5", Value::Int(5)),
         (r#""long""#, "5", Value::Long(5)),
         (r#""float""#, "1.1", Value::Float(1.1)),
         (r#""double""#, "1.1", Value::Double(1.1)),
+
+        (r#"{"type": "string", "logicalType": "uuid"}"#, r#""64a8cd70-28e3-4fc4-9c7f-db18d8cac512""#, Value::Uuid(uuid::Uuid::from_str("64a8cd70-28e3-4fc4-9c7f-db18d8cac512").unwrap())),
+        (r#"{"type": "long", "logicalType": "timestamp-millis"}"#, "123456789", Value::TimestampMillis(123456789)),
+
+
         // TODO: (#96) investigate why this is failing
+        // Probably same as bytes
         //(r#"{"type": "fixed", "name": "F", "size": 2}"#, r#""\u00FF\u00FF""#, Value::Bytes(vec![0xff, 0xff])),
         (r#"{"type": "enum", "name": "F", "symbols": ["FOO", "BAR"]}"#, r#""FOO""#, Value::Enum(0, "FOO".to_string())),
         (r#"{"type": "array", "items": "int"}"#, "[1, 2, 3]", Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
         (r#"{"type": "map", "values": "int"}"#, r#"{"a": 1, "b": 2}"#, Value::Map([("a".to_string(), Value::Int(1)), ("b".to_string(), Value::Int(2))].iter().cloned().collect())),
         (r#"["int", "null"]"#, "5", Value::Union(Box::new(Value::Int(5)))),
+
+        (r#"[{"type": "string", "logicalType": "uuid"}, "null"]"#, r#""64a8cd70-28e3-4fc4-9c7f-db18d8cac512""#, Value::Union(Box::new(Value::Uuid(uuid::Uuid::from_str("64a8cd70-28e3-4fc4-9c7f-db18d8cac512").unwrap())))),
+        (r#"[{"type": "long", "logicalType": "timestamp-millis"}, "null"]"#, "123456789", Value::Union(Box::new(Value::TimestampMillis(123456789)))),
+
         (r#"{"type": "record", "name": "F", "fields": [{"name": "A", "type": "int"}]}"#, r#"{"A": 5}"#,Value::Record(vec![("A".to_string(), Value::Int(5))])),
     ];
 

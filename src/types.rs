@@ -333,7 +333,7 @@ impl Value {
             (&Value::Float(_), SchemaType::Float) => true,
             (&Value::Double(_), SchemaType::Double) => true,
             (&Value::Bytes(_), SchemaType::Bytes) => true,
-            (&Value::Bytes(_), SchemaType::Decimal(dec)) => true,
+            (&Value::Bytes(_), SchemaType::Decimal(_)) => true,
             (&Value::String(_), SchemaType::String) => true,
             (&Value::String(_), SchemaType::Uuid) => true,
             //TODO: do we need to use name here for the fixed?
@@ -477,7 +477,7 @@ impl Value {
                     precision,
                     num_bytes,
                     max_precision_for_num_bytes,
-                })
+                });
             }
         }
 
@@ -650,7 +650,7 @@ impl Value {
         };
         // Find the first match in the reader schema.
         let (_, inner) = schema
-            .resolve_union_schema(&v)
+            .resolve_union_schema(&v)
             .ok_or_else(|| Error::FindUnionVariant)?;
         Ok(Value::Union(Box::new(v.resolve(inner)?)))
     }
@@ -708,11 +708,7 @@ impl Value {
                     Some(value) => value,
                     None => match field.default() {
                         Some(value) => {
-                            let value: Value = value.clone().into();
-                            match field.schema() {
-                                SchemaType::Enum(enum_) => value.resolve_enum(&enum_.symbols())?,
-                                _ => value,
-                            }
+                            Self::resolve_default_value(&field.schema(), value.clone().into())?
                         }
                         _ => return Err(Error::GetField(field.name().to_owned())),
                     },
@@ -724,6 +720,16 @@ impl Value {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Value::Record(new_fields))
+    }
+
+    fn resolve_default_value(schema: &SchemaType, value: Value) -> Result<Value, Error> {
+        let resolved_value = match schema {
+            SchemaType::Union(schema) => Self::resolve_default_value(&schema.variants()[0], value)?, // The default value must resolve to the first variant of the union.
+            SchemaType::Enum(enum_) => value.resolve_enum(&enum_.symbols())?,
+            _ => value.resolve(*schema)?,
+        };
+
+        Ok(resolved_value)
     }
 
     fn try_u8(self) -> AvroResult<u8> {
@@ -964,7 +970,7 @@ mod tests {
     fn resolve_decimal_bytes() {
         let value = Value::Decimal(Decimal::from(vec![1, 2]));
         let mut builder = Schema::builder();
-        let mut decimal = builder.named_decimal("test");
+        let mut decimal = builder.decimal();
         decimal.scale(2);
         let root = decimal.precision(4, &mut builder).unwrap();
         let expected = builder.build(root).unwrap();
@@ -975,7 +981,7 @@ mod tests {
     #[test]
     fn resolve_decimal_invalid_scale() {
         let mut builder = Schema::builder();
-        let mut decimal = builder.named_decimal("test");
+        let mut decimal = builder.decimal();
         decimal.scale(3);
         let root = decimal.precision(2, &mut builder);
         assert!(root.is_err())
@@ -985,10 +991,7 @@ mod tests {
     fn resolve_decimal_invalid_precision_for_length() {
         let value = Value::Decimal(Decimal::from((1u8..=8u8).rev().collect::<Vec<_>>()));
         let mut builder = Schema::builder();
-        let root = builder
-            .named_decimal("test")
-            .precision(1, &mut builder)
-            .unwrap();
+        let root = builder.decimal().precision(1, &mut builder).unwrap();
         let expected = builder.build(root).unwrap();
         assert!(value.resolve(expected.root()).is_err());
     }

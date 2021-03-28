@@ -221,17 +221,21 @@ impl<'s> DecimalBuilder<'s> {
             });
         }
 
+        let name_ref = if let Some(name) = self.name {
+            Some(name.into_ref(builder)?)
+        } else {
+            None
+        };
+
         let schema_datum = SchemaData::Decimal {
+            name: name_ref,
             precision,
             scale: self.scale,
             size: self.size,
         };
 
-        match self.name {
-            Some(name) => {
-                let name_ref = name.into_ref(builder)?;
-                builder.add_type(name_ref, schema_datum)
-            }
+        match name_ref {
+            Some(name) => builder.add_type(name, schema_datum),
             None => builder.add_anon_type(schema_datum),
         }
     }
